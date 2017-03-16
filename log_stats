@@ -1,0 +1,124 @@
+#!/usr/bin/node
+
+
+//Pentru a rezolva aceasta problema am folosit node.js,
+//pentru rularea lui este nevoie de acest interpretator.
+
+
+var fs = require('fs');
+
+var args = {
+    filePath: '',
+    sr: '',
+    interval: 1,
+    startDate: '',
+    endDate: '',
+    success: []
+}
+
+var list = {};
+
+process.argv.forEach(function (val, index, array) {
+    if (index == 2) args.filePath = val;
+    if (val == '--interval') args.interval = array[++index];
+    if (val == '--start') { args.startDate = array[++index] };
+    if (val == '--end') args.endDate = array[++index];
+    if (val == '--success') args.success = array[++index].split(',');
+});
+
+function compare(status) {
+    var temp = status.toString();
+    for (var i = 0; i < args.success.length; i++) {
+        var toCompare = args.success[i].toString();
+        var ok = 0;
+        for (var j = 0; j < 3; j++) {
+            if (temp[j] != toCompare[j] && toCompare[j] != 'x') break;
+            else ok++;
+        }
+        if (ok == 3) return 1;
+    }
+    return 0;
+}
+
+function calculateDate(line) {
+    var date = /\[(.+?)\s/igm.exec(line)[1].split('/');
+    var hour = date[2].split(':');
+    var time = date[0] + ',' + date[1] + ',' + hour[0] + ' ' + hour[1] + ':' + hour[2];
+    return time;
+}
+
+function makeList(summ, many, timer, namee) {
+
+    procent = (many / summ * 100).toFixed(2);
+    if (!list[timer]) {
+        list[timer] = {};
+    }
+    list[timer][namee] = procent;
+}
+
+fs = fs.readFileSync(args.filePath);
+fs = fs.toString().split('\n');
+
+for (var i = 0; i < fs.length - 1; i++) {
+    if (fs[i] == '') continue;
+    var name = / (\/.*.html)/igm.exec(fs[i])[1];
+    var time = calculateDate(fs[i]);
+    var sum = 0, numberOf = 0, procent;
+
+    var s = i;
+
+    if (args.startDate != '' && new Date(args.startDate) > new Date(time)) continue;
+    if (args.endDate != '' && args.endDate < new Date(time)) break;
+
+    while (s != fs.length) {
+        if (fs[s] != '') {
+            if (name == / (\/.*.html)/igm.exec(fs[s])[1]) {
+                var tempTime = calculateDate(fs[s]);
+
+                if (Math.abs(new Date(tempTime) - new Date(time)) / 1000 < args.interval * 60) {
+                    if (args.endDate == '') {
+                        sum++;
+                        if (args.success.length > 0) {
+                            var statusCode = /" ([0-9]{3})/igm.exec(fs[s])[1];
+                            if (compare(statusCode)) numberOf++
+                        }
+                        else {
+
+                            var statusCode = /" ([0-9]{1})[0-9]{2}/igm.exec(fs[s])[1];
+                            if (statusCode == 2) numberOf++;
+                        }
+                    }
+                    else {
+                        if (new Date(tempTime) <= new Date(args.endDate)) {
+                            sum++;
+                            if (args.success.length > 0) {
+                                var statusCode = /" ([0-9]{3})/igm.exec(fs[s])[1];
+                                if (compare(statusCode)) numberOf++
+                            }
+                            else {
+                                var statusCode = /" ([0-9]{1})[0-9]{2}/igm.exec(fs[s])[1];
+                                if (statusCode == 2) numberOf++;
+                            }
+                        }
+                    }
+                    fs[s] = '';
+                }
+                else {
+                    makeList(sum, numberOf, new Date(time).toISOString(), name);
+                    time = calculateDate(fs[s]);
+                    sum = 0;
+                    numberOf = 0;
+                    s--;
+                }
+            }
+            makeList(sum, numberOf, new Date(time).toISOString(), name);
+        }
+        s++;
+    }
+}
+
+Object.keys(list).sort().forEach(function (val) {
+    Object.keys(list[val]).sort().forEach(function (val2) {
+        console.log(val.substr(0, 16), args.interval, val2, list[val][val2]);
+    });
+});
